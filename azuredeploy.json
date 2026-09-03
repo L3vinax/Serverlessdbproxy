@@ -1,0 +1,687 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "16403225533830837484"
+    },
+    "description": "Deploys HAProxy behind an internal Standard Load Balancer and Private Link Service for Databricks Serverless access to on-premises SQL Server."
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "prefix": {
+      "type": "string",
+      "defaultValue": "dbx-sqlproxy"
+    },
+    "subnetResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing subnet resource ID. Private Link service network policies must be disabled."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureadmin"
+    },
+    "sshPublicKey": {
+      "type": "securestring"
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D2s_v5"
+    },
+    "frontendPort": {
+      "type": "int",
+      "defaultValue": 1433,
+      "minValue": 1,
+      "maxValue": 65535
+    },
+    "sqlServerAddress": {
+      "type": "string"
+    },
+    "sqlServerPort": {
+      "type": "int",
+      "defaultValue": 1433,
+      "minValue": 1,
+      "maxValue": 65535
+    },
+    "maxConnections": {
+      "type": "int",
+      "defaultValue": 10000
+    },
+    "visibilitySubscriptionIds": {
+      "type": "array",
+      "defaultValue": []
+    },
+    "autoApprovalSubscriptionIds": {
+      "type": "array",
+      "defaultValue": []
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "nsg",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}-nsg', parameters('prefix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "frontendPort": {
+            "value": "[parameters('frontendPort')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "7059808033665160147"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "frontendPort": {
+              "type": "int"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "Allow-PrivateLink-Traffic",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "[string(parameters('frontendPort'))]",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Allow-AzureLoadBalancer-Probe",
+                    "properties": {
+                      "priority": 110,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "8404",
+                      "sourceAddressPrefix": "AzureLoadBalancer",
+                      "destinationAddressPrefix": "*"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('name'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "load-balancer",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}-ilb', parameters('prefix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "subnetResourceId": {
+            "value": "[parameters('subnetResourceId')]"
+          },
+          "frontendPort": {
+            "value": "[parameters('frontendPort')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "16891837026008950075"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "subnetResourceId": {
+              "type": "string"
+            },
+            "frontendPort": {
+              "type": "int"
+            }
+          },
+          "variables": {
+            "frontendName": "sql-frontend",
+            "backendPoolName": "haproxy-backend",
+            "probeName": "haproxy-health"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/loadBalancers",
+              "apiVersion": "2024-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+              },
+              "properties": {
+                "frontendIPConfigurations": [
+                  {
+                    "name": "[variables('frontendName')]",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('subnetResourceId')]"
+                      },
+                      "privateIPAllocationMethod": "Dynamic",
+                      "privateIPAddressVersion": "IPv4"
+                    }
+                  }
+                ],
+                "backendAddressPools": [
+                  {
+                    "name": "[variables('backendPoolName')]"
+                  }
+                ],
+                "probes": [
+                  {
+                    "name": "[variables('probeName')]",
+                    "properties": {
+                      "protocol": "Http",
+                      "port": 8404,
+                      "requestPath": "/health",
+                      "intervalInSeconds": 5,
+                      "numberOfProbes": 2
+                    }
+                  }
+                ],
+                "loadBalancingRules": [
+                  {
+                    "name": "sql-forwarding",
+                    "properties": {
+                      "protocol": "Tcp",
+                      "frontendPort": "[parameters('frontendPort')]",
+                      "backendPort": "[parameters('frontendPort')]",
+                      "enableFloatingIP": false,
+                      "enableTcpReset": true,
+                      "idleTimeoutInMinutes": 30,
+                      "disableOutboundSnat": true,
+                      "frontendIPConfiguration": {
+                        "id": "[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', parameters('name'), variables('frontendName'))]"
+                      },
+                      "backendAddressPool": {
+                        "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', parameters('name'), variables('backendPoolName'))]"
+                      },
+                      "probe": {
+                        "id": "[resourceId('Microsoft.Network/loadBalancers/probes', parameters('name'), variables('probeName'))]"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/loadBalancers', parameters('name'))]"
+            },
+            "frontendId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', parameters('name'), variables('frontendName'))]"
+            },
+            "backendPoolId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', parameters('name'), variables('backendPoolName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "haproxy-vm",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}-vm', parameters('prefix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "subnetResourceId": {
+            "value": "[parameters('subnetResourceId')]"
+          },
+          "nsgResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'nsg'), '2025-04-01').outputs.id.value]"
+          },
+          "backendPoolId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'load-balancer'), '2025-04-01').outputs.backendPoolId.value]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "sshPublicKey": {
+            "value": "[parameters('sshPublicKey')]"
+          },
+          "vmSize": {
+            "value": "[parameters('vmSize')]"
+          },
+          "frontendPort": {
+            "value": "[parameters('frontendPort')]"
+          },
+          "sqlServerAddress": {
+            "value": "[parameters('sqlServerAddress')]"
+          },
+          "sqlServerPort": {
+            "value": "[parameters('sqlServerPort')]"
+          },
+          "maxConnections": {
+            "value": "[parameters('maxConnections')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "11692903765086799362"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "subnetResourceId": {
+              "type": "string"
+            },
+            "nsgResourceId": {
+              "type": "string"
+            },
+            "backendPoolId": {
+              "type": "string"
+            },
+            "adminUsername": {
+              "type": "string"
+            },
+            "sshPublicKey": {
+              "type": "securestring"
+            },
+            "vmSize": {
+              "type": "string"
+            },
+            "frontendPort": {
+              "type": "int"
+            },
+            "sqlServerAddress": {
+              "type": "string"
+            },
+            "sqlServerPort": {
+              "type": "int"
+            },
+            "maxConnections": {
+              "type": "int"
+            }
+          },
+          "variables": {
+            "nicName": "[format('{0}-nic', parameters('name'))]",
+            "cloudInit": "[format('#cloud-config\npackage_update: true\npackages:\n  - haproxy\n\nwrite_files:\n  - path: /etc/haproxy/haproxy.cfg\n    owner: root:root\n    permissions: ''0644''\n    content: |\n      global\n          log /dev/log local0\n          log /dev/log local1 notice\n          user haproxy\n          group haproxy\n          daemon\n          maxconn {0}\n\n      defaults\n          log global\n          mode tcp\n          option tcplog\n          option dontlognull\n          timeout connect 10s\n          timeout client 1h\n          timeout server 1h\n\n      frontend sql_frontend\n          bind 0.0.0.0:{1}\n          default_backend sql_backend\n\n      backend sql_backend\n          option tcp-check\n          server sql01 {2}:{3} check inter 5s fall 3 rise 2\n\n      listen health\n          bind 0.0.0.0:8404\n          mode http\n          monitor-uri /health\n\nruncmd:\n  - haproxy -c -f /etc/haproxy/haproxy.cfg\n  - systemctl enable haproxy\n  - systemctl restart haproxy\n', parameters('maxConnections'), parameters('frontendPort'), parameters('sqlServerAddress'), parameters('sqlServerPort'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2024-05-01",
+              "name": "[variables('nicName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "enableAcceleratedNetworking": true,
+                "networkSecurityGroup": {
+                  "id": "[parameters('nsgResourceId')]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "primary": true,
+                      "privateIPAllocationMethod": "Dynamic",
+                      "subnet": {
+                        "id": "[parameters('subnetResourceId')]"
+                      },
+                      "loadBalancerBackendAddressPools": [
+                        {
+                          "id": "[parameters('backendPoolId')]"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-07-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "[parameters('vmSize')]"
+                },
+                "securityProfile": {
+                  "securityType": "TrustedLaunch",
+                  "uefiSettings": {
+                    "secureBootEnabled": true,
+                    "vTpmEnabled": true
+                  }
+                },
+                "osProfile": {
+                  "computerName": "[take(parameters('name'), 64)]",
+                  "adminUsername": "[parameters('adminUsername')]",
+                  "customData": "[base64(variables('cloudInit'))]",
+                  "linuxConfiguration": {
+                    "disablePasswordAuthentication": true,
+                    "provisionVMAgent": true,
+                    "patchSettings": {
+                      "assessmentMode": "AutomaticByPlatform",
+                      "patchMode": "AutomaticByPlatform"
+                    },
+                    "ssh": {
+                      "publicKeys": [
+                        {
+                          "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
+                          "keyData": "[parameters('sshPublicKey')]"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "Canonical",
+                    "offer": "ubuntu-24_04-lts",
+                    "sku": "server",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "createOption": "FromImage",
+                    "caching": "ReadWrite",
+                    "managedDisk": {
+                      "storageAccountType": "Premium_LRS"
+                    },
+                    "diskSizeGB": 64
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                    }
+                  ]
+                },
+                "diagnosticsProfile": {
+                  "bootDiagnostics": {
+                    "enabled": true
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vmId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Compute/virtualMachines', parameters('name'))]"
+            },
+            "vmName": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "nicId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'load-balancer')]",
+        "[resourceId('Microsoft.Resources/deployments', 'nsg')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "private-link-service",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}-pls', parameters('prefix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "subnetResourceId": {
+            "value": "[parameters('subnetResourceId')]"
+          },
+          "loadBalancerFrontendId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'load-balancer'), '2025-04-01').outputs.frontendId.value]"
+          },
+          "visibilitySubscriptionIds": {
+            "value": "[parameters('visibilitySubscriptionIds')]"
+          },
+          "autoApprovalSubscriptionIds": {
+            "value": "[parameters('autoApprovalSubscriptionIds')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "16342079210154985137"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "subnetResourceId": {
+              "type": "string"
+            },
+            "loadBalancerFrontendId": {
+              "type": "string"
+            },
+            "visibilitySubscriptionIds": {
+              "type": "array",
+              "defaultValue": []
+            },
+            "autoApprovalSubscriptionIds": {
+              "type": "array",
+              "defaultValue": []
+            }
+          },
+          "variables": {
+            "visibility": "[if(empty(parameters('visibilitySubscriptionIds')), createArray(subscription().subscriptionId), parameters('visibilitySubscriptionIds'))]",
+            "autoApproval": "[parameters('autoApprovalSubscriptionIds')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateLinkServices",
+              "apiVersion": "2024-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "enableProxyProtocol": false,
+                "loadBalancerFrontendIpConfigurations": [
+                  {
+                    "id": "[parameters('loadBalancerFrontendId')]"
+                  }
+                ],
+                "ipConfigurations": [
+                  {
+                    "name": "nat-ipconfig-1",
+                    "properties": {
+                      "primary": true,
+                      "privateIPAddressVersion": "IPv4",
+                      "privateIPAllocationMethod": "Dynamic",
+                      "subnet": {
+                        "id": "[parameters('subnetResourceId')]"
+                      }
+                    }
+                  }
+                ],
+                "visibility": {
+                  "subscriptions": "[variables('visibility')]"
+                },
+                "autoApproval": {
+                  "subscriptions": "[variables('autoApproval')]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/privateLinkServices', parameters('name'))]"
+            },
+            "alias": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/privateLinkServices', parameters('name')), '2024-05-01').alias]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'load-balancer')]",
+        "[resourceId('Microsoft.Resources/deployments', 'haproxy-vm')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "privateLinkServiceId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'private-link-service'), '2025-04-01').outputs.id.value]"
+    },
+    "privateLinkServiceAlias": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'private-link-service'), '2025-04-01').outputs.alias.value]"
+    },
+    "haproxyVmName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'haproxy-vm'), '2025-04-01').outputs.vmName.value]"
+    },
+    "frontendPort": {
+      "type": "int",
+      "value": "[parameters('frontendPort')]"
+    }
+  }
+}
