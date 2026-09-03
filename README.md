@@ -2,6 +2,8 @@
 
 Deploys an HAProxy Ubuntu VM behind an internal Standard Load Balancer and Azure Private Link Service.
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FL3vinax%2FServerlessdbproxy%2Fmain%2Fazuredeploy.json)
+
 ## Prerequisites
 
 - Existing subnet with routing to on-premises through vWAN/ExpressRoute.
@@ -22,14 +24,3 @@ az deployment group create \
   --parameters examples/main.bicepparam
 ```
 
-## Validate
-
-```bash
-az vm run-command invoke \
-  --resource-group <deployment-rg> \
-  --name dbx-sqlproxy-prod-vm \
-  --command-id RunShellScript \
-  --scripts 'haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl is-active haproxy'
-```
-
-This baseline uses one VM. Use two zonal VMs for production availability.

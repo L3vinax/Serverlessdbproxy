@@ -1,0 +1,224 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "Deploy Databricks Serverless SQL Proxy",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Basics",
+          "description": "Choose where to deploy the HAProxy resources.",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "location": {
+                "resourceTypes": [
+                  "Microsoft.Compute/virtualMachines",
+                  "Microsoft.Network/loadBalancers",
+                  "Microsoft.Network/privateLinkServices"
+                ]
+              }
+            },
+            {
+              "name": "prefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Resource name prefix",
+              "defaultValue": "dbx-sqlproxy",
+              "toolTip": "Prefix used for the VM, load balancer, network security group, and Private Link Service.",
+              "constraints": {
+                "required": true,
+                "regex": "^[a-zA-Z0-9][a-zA-Z0-9-]{1,38}[a-zA-Z0-9]$",
+                "validationMessage": "Use 3-40 letters, numbers, or hyphens, beginning and ending with a letter or number."
+              },
+              "visible": true
+            }
+          ]
+        },
+        {
+          "name": "network",
+          "label": "Network",
+          "description": "Select the existing subnet used by HAProxy, the internal load balancer, and the Private Link Service.",
+          "elements": [
+            {
+              "name": "subnet",
+              "type": "Microsoft.Solutions.ResourceSelector",
+              "label": "Existing subnet",
+              "resourceType": "Microsoft.Network/virtualNetworks/subnets",
+              "options": {
+                "filter": {
+                  "subscription": "onBasics",
+                  "location": "onBasics"
+                }
+              }
+            },
+            {
+              "name": "networkRequirements",
+              "type": "Microsoft.Common.InfoBox",
+              "options": {
+                "icon": "Info",
+                "text": "The subnet must have Private Link Service network policies disabled, routing to the SQL Server, and outbound access to Ubuntu package repositories through a NAT Gateway or approved firewall."
+              }
+            }
+          ]
+        },
+        {
+          "name": "virtualMachine",
+          "label": "Virtual machine",
+          "description": "Configure the Ubuntu VM that runs HAProxy.",
+          "elements": [
+            {
+              "name": "adminUsername",
+              "type": "Microsoft.Compute.UserNameTextBox",
+              "label": "Administrator username",
+              "defaultValue": "azureadmin",
+              "toolTip": "Local administrator account for SSH access.",
+              "osPlatform": "Linux",
+              "visible": true
+            },
+            {
+              "name": "sshPublicKey",
+              "type": "Microsoft.Common.TextBox",
+              "label": "SSH public key",
+              "placeholder": "ssh-ed25519 AAAA...",
+              "toolTip": "Paste the complete OpenSSH public key for the administrator account.",
+              "multiLine": true,
+              "constraints": {
+                "required": true,
+                "regex": "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+={0,3}( .*)?$",
+                "validationMessage": "Enter a valid RSA, ED25519, or ECDSA OpenSSH public key."
+              },
+              "visible": true
+            },
+            {
+              "name": "vmSize",
+              "type": "Microsoft.Compute.SizeSelector",
+              "label": "VM size",
+              "toolTip": "Select the compute size for the HAProxy VM.",
+              "recommendedSizes": [
+                "Standard_D2s_v5",
+                "Standard_D4s_v5",
+                "Standard_D2s_v6"
+              ],
+              "constraints": {
+                "excludedSizes": []
+              },
+              "options": {
+                "hideDiskTypeFilter": false
+              },
+              "osPlatform": "Linux",
+              "count": 1,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "name": "proxy",
+          "label": "Proxy settings",
+          "description": "Configure the listener, SQL backend, and Private Link visibility.",
+          "elements": [
+            {
+              "name": "sqlServerAddress",
+              "type": "Microsoft.Common.TextBox",
+              "label": "SQL Server address",
+              "placeholder": "10.100.20.25 or sql.contoso.local",
+              "toolTip": "IP address or DNS name reachable from the selected subnet.",
+              "constraints": {
+                "required": true,
+                "regex": "^[a-zA-Z0-9](?:[a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?$",
+                "validationMessage": "Enter a valid IP address or DNS name."
+              },
+              "visible": true
+            },
+            {
+              "name": "sqlServerPort",
+              "type": "Microsoft.Common.TextBox",
+              "label": "SQL Server port",
+              "defaultValue": "1433",
+              "toolTip": "TCP port on the destination SQL Server.",
+              "constraints": {
+                "required": true,
+                "regex": "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
+                "validationMessage": "Enter a port from 1 through 65535."
+              },
+              "visible": true
+            },
+            {
+              "name": "frontendPort",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Proxy listener port",
+              "defaultValue": "1433",
+              "toolTip": "TCP port exposed by HAProxy and the internal load balancer.",
+              "constraints": {
+                "required": true,
+                "regex": "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
+                "validationMessage": "Enter a port from 1 through 65535."
+              },
+              "visible": true
+            },
+            {
+              "name": "maxConnections",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Maximum HAProxy connections",
+              "defaultValue": "10000",
+              "toolTip": "Maximum concurrent connections accepted by HAProxy.",
+              "constraints": {
+                "required": true,
+                "regex": "^[1-9][0-9]{0,6}$",
+                "validationMessage": "Enter a positive integer of up to seven digits."
+              },
+              "visible": true
+            },
+            {
+              "name": "visibilitySubscriptionIds",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Visible subscription IDs",
+              "placeholder": "00000000-0000-0000-0000-000000000000",
+              "toolTip": "Optional comma-separated subscription IDs allowed to discover the Private Link Service. Empty defaults to the deployment subscription.",
+              "constraints": {
+                "required": false,
+                "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(,[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$",
+                "validationMessage": "Enter comma-separated subscription GUIDs without spaces."
+              },
+              "visible": true
+            },
+            {
+              "name": "autoApprovalSubscriptionIds",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Auto-approved subscription IDs",
+              "placeholder": "00000000-0000-0000-0000-000000000000",
+              "toolTip": "Optional comma-separated subscription IDs whose private endpoint requests are approved automatically.",
+              "constraints": {
+                "required": false,
+                "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(,[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$",
+                "validationMessage": "Enter comma-separated subscription GUIDs without spaces."
+              },
+              "visible": true
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "kind": "ResourceGroup",
+      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "parameters": {
+        "location": "[steps('basics').resourceScope.location.name]",
+        "prefix": "[steps('basics').prefix]",
+        "subnetResourceId": "[steps('network').subnet.id]",
+        "adminUsername": "[steps('virtualMachine').adminUsername]",
+        "sshPublicKey": "[steps('virtualMachine').sshPublicKey]",
+        "vmSize": "[steps('virtualMachine').vmSize]",
+        "frontendPort": "[int(steps('proxy').frontendPort)]",
+        "sqlServerAddress": "[steps('proxy').sqlServerAddress]",
+        "sqlServerPort": "[int(steps('proxy').sqlServerPort)]",
+        "maxConnections": "[int(steps('proxy').maxConnections)]",
+        "visibilitySubscriptionIds": "[if(empty(steps('proxy').visibilitySubscriptionIds), parse('[]'), split(steps('proxy').visibilitySubscriptionIds, ','))]",
+        "autoApprovalSubscriptionIds": "[if(empty(steps('proxy').autoApprovalSubscriptionIds), parse('[]'), split(steps('proxy').autoApprovalSubscriptionIds, ','))]",
+        "tags": "[parse('{}')]"
+      }
+    }
+  }
+}
