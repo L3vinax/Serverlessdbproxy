@@ -18,9 +18,18 @@ az network vnet subnet update \
   --name <subnet> \
   --disable-private-link-service-network-policies true
 
-az deployment group create \
-  --resource-group <deployment-rg> \
-  --template-file main.bicep \
-  --parameters examples/main.bicepparam
 ```
 
+## Validate
+
+```bash
+az vm run-command invoke \
+  --resource-group <deployment-rg> \
+  --name dbx-sqlproxy-prod-vm \
+  --command-id RunShellScript \
+  --scripts 'haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl is-active haproxy'
+```
+
+This baseline uses one VM. Use two zonal VMs for production availability.
+
+This scirpt is provided as-is. Please validate all deployments.
