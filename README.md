@@ -40,12 +40,12 @@ az vm run-command invoke \
 
 This baseline uses one VM. Use two zonal VMs for production availability.
 
-## Next Steps
+# Next Steps
 
 Configure Serverless Databricks workspace to use NCC
 In NCC, establish private endpoint to the Private Link Service created in this script
 
-# Deploy Databricks NCC
+### Deploy Databricks NCC
 There is now an option to have these parts configured via the script.  If you set the Deploy Databricks NCC to "True"
 This requires an existing Databricks workspace.  You will need the account ID, workspace ID, and a User Assigned Managed Identity that is Account Admin on the Databricks account.
 
