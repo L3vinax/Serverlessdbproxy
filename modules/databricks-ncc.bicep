@@ -71,24 +71,42 @@ resource ncc 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
       BASE="$ACCOUNT_HOST/api/2.0/accounts/$ACCOUNT_ID"
       AUTH_HEADER="Authorization: Bearer $TOKEN"
 
-      echo "Creating network connectivity configuration '$NCC_NAME' in $REGION..."
-      NCC_BODY=$(python3 -c 'import json,os; print(json.dumps({"name": os.environ["NCC_NAME"], "region": os.environ["REGION"]}))')
-      NCC_JSON=$(curl -sf -X POST "$BASE/network-connectivity-configs" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$NCC_BODY")
-      NCC_ID=$(echo "$NCC_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["network_connectivity_config_id"])')
+      # Reuse an existing NCC with the same name instead of creating a duplicate on every redeploy.
+      EXISTING_NCC_JSON=$(curl -sf -H "$AUTH_HEADER" "$BASE/network-connectivity-configs")
+      NCC_ID=$(echo "$EXISTING_NCC_JSON" | python3 -c 'import json,os,sys; items=json.load(sys.stdin).get("items",[]); m=[i for i in items if i["name"]==os.environ["NCC_NAME"]]; print(m[0]["network_connectivity_config_id"] if m else "")')
+
+      if [ -z "$NCC_ID" ]; then
+        echo "Creating network connectivity configuration '$NCC_NAME' in $REGION..."
+        NCC_BODY=$(python3 -c 'import json,os; print(json.dumps({"name": os.environ["NCC_NAME"], "region": os.environ["REGION"]}))')
+        NCC_JSON=$(curl -sf -X POST "$BASE/network-connectivity-configs" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$NCC_BODY")
+        NCC_ID=$(echo "$NCC_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["network_connectivity_config_id"])')
+        echo "Created NCC $NCC_ID"
+      else
+        echo "Reusing existing NCC $NCC_ID"
+      fi
       export NCC_ID
-      echo "Created NCC $NCC_ID"
 
       echo "Binding NCC to workspace $WORKSPACE_ID..."
       BIND_BODY=$(python3 -c 'import json,os; print(json.dumps({"network_connectivity_config_id": os.environ["NCC_ID"]}))')
       curl -sf -X PATCH "$BASE/workspaces/$WORKSPACE_ID" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$BIND_BODY" > /dev/null
 
-      echo "Creating private endpoint rule to $PLS_RESOURCE_ID..."
-      RULE_BODY=$(python3 -c 'import json,os; print(json.dumps({"resource_id": os.environ["PLS_RESOURCE_ID"], "domain_names": json.loads(os.environ["DOMAIN_NAMES_JSON"])}))')
-      RULE_JSON=$(curl -sf -X POST "$BASE/network-connectivity-configs/$NCC_ID/private-endpoint-rules" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$RULE_BODY")
+      # Reuse (and update domain_names on) an existing rule for this resource_id instead of creating a duplicate private endpoint.
+      EXISTING_RULES_JSON=$(curl -sf -H "$AUTH_HEADER" "$BASE/network-connectivity-configs/$NCC_ID/private-endpoint-rules")
+      RULE_ID=$(echo "$EXISTING_RULES_JSON" | python3 -c 'import json,os,sys; items=json.load(sys.stdin).get("items",[]); m=[i for i in items if i.get("resource_id")==os.environ["PLS_RESOURCE_ID"] and not i.get("deactivated")]; print(m[0]["rule_id"] if m else "")')
+
+      if [ -z "$RULE_ID" ]; then
+        echo "Creating private endpoint rule to $PLS_RESOURCE_ID..."
+        RULE_BODY=$(python3 -c 'import json,os; print(json.dumps({"resource_id": os.environ["PLS_RESOURCE_ID"], "domain_names": json.loads(os.environ["DOMAIN_NAMES_JSON"])}))')
+        RULE_JSON=$(curl -sf -X POST "$BASE/network-connectivity-configs/$NCC_ID/private-endpoint-rules" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$RULE_BODY")
+      else
+        echo "Updating domain_names on existing private endpoint rule $RULE_ID..."
+        RULE_BODY=$(python3 -c 'import json,os; print(json.dumps({"domain_names": json.loads(os.environ["DOMAIN_NAMES_JSON"])}))')
+        RULE_JSON=$(curl -sf -X PATCH "$BASE/network-connectivity-configs/$NCC_ID/private-endpoint-rules/$RULE_ID?update_mask=domain_names" -H "$AUTH_HEADER" -H "Content-Type: application/json" -d "$RULE_BODY")
+      fi
       RULE_ID=$(echo "$RULE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["rule_id"])')
       CONNECTION_STATE=$(echo "$RULE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["connection_state"])')
       export RULE_ID CONNECTION_STATE
-      echo "Created private endpoint rule $RULE_ID (connection_state=$CONNECTION_STATE)"
+      echo "Private endpoint rule $RULE_ID ready (connection_state=$CONNECTION_STATE)"
 
       python3 -c 'import json,os; print(json.dumps({"networkConnectivityConfigId": os.environ["NCC_ID"], "privateEndpointRuleId": os.environ["RULE_ID"], "connectionState": os.environ["CONNECTION_STATE"]}))' > "$AZ_SCRIPTS_OUTPUT_PATH"
     '''
