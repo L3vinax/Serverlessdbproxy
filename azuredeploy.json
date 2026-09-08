@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "16403225533830837484"
+      "templateHash": "6171535810229528992"
     },
     "description": "Deploys HAProxy behind an internal Standard Load Balancer and Private Link Service for Databricks Serverless access to on-premises SQL Server."
   },
@@ -65,6 +65,49 @@
     "tags": {
       "type": "object",
       "defaultValue": {}
+    },
+    "deployDatabricksNcc": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set true to also configure a Databricks NCC and private endpoint to the Private Link Service created above."
+      }
+    },
+    "databricksAccountConsoleUrl": {
+      "type": "string",
+      "defaultValue": "https://accounts.azuredatabricks.net"
+    },
+    "databricksAccountId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "databricksWorkspaceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Numeric Databricks workspace ID (not the ARM resource ID)."
+      }
+    },
+    "databricksRegion": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure region in Databricks region format (e.g. westus2). Required if deployDatabricksNcc is true."
+      }
+    },
+    "privateLinkServiceDomainNames": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Domain name(s) clients use to reach the Private Link Service, e.g. the on-prem SQL Server FQDN."
+      }
+    },
+    "databricksNccIdentityResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of a user-assigned managed identity that is an Account Admin in the Databricks account. Required if deployDatabricksNcc is true."
+      }
     }
   },
   "resources": [
@@ -664,6 +707,197 @@
         "[resourceId('Microsoft.Resources/deployments', 'load-balancer')]",
         "[resourceId('Microsoft.Resources/deployments', 'haproxy-vm')]"
       ]
+    },
+    {
+      "condition": "[parameters('deployDatabricksNcc')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "databricks-ncc",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "accountConsoleUrl": {
+            "value": "[parameters('databricksAccountConsoleUrl')]"
+          },
+          "databricksAccountId": {
+            "value": "[parameters('databricksAccountId')]"
+          },
+          "databricksWorkspaceId": {
+            "value": "[parameters('databricksWorkspaceId')]"
+          },
+          "region": {
+            "value": "[parameters('databricksRegion')]"
+          },
+          "nccName": {
+            "value": "[format('{0}-ncc', parameters('prefix'))]"
+          },
+          "privateLinkServiceResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'private-link-service'), '2025-04-01').outputs.id.value]"
+          },
+          "privateLinkServiceDomainNames": {
+            "value": "[parameters('privateLinkServiceDomainNames')]"
+          },
+          "identityResourceId": {
+            "value": "[parameters('databricksNccIdentityResourceId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "16561479160707118442"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            },
+            "accountConsoleUrl": {
+              "type": "string",
+              "defaultValue": "https://accounts.azuredatabricks.net",
+              "metadata": {
+                "description": "Databricks account console URL."
+              }
+            },
+            "databricksAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Databricks account ID (Account Console > Settings)."
+              }
+            },
+            "databricksWorkspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Numeric Databricks workspace ID (not the ARM resource ID) to bind the NCC to."
+              }
+            },
+            "region": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region in Databricks region format (e.g. westus2). Must match the workspace region."
+              }
+            },
+            "nccName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the network connectivity configuration. Must match ^[0-9a-zA-Z-_]{3,30}$."
+              }
+            },
+            "privateLinkServiceResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Private Link Service to create a private endpoint to."
+              }
+            },
+            "privateLinkServiceDomainNames": {
+              "type": "array",
+              "metadata": {
+                "description": "Domain name(s) clients use to reach the Private Link Service, e.g. the on-prem SQL Server FQDN."
+              }
+            },
+            "identityResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of a user-assigned managed identity that is an Account Admin in the Databricks account."
+              }
+            },
+            "forceUpdateTag": {
+              "type": "string",
+              "defaultValue": "[utcNow()]",
+              "metadata": {
+                "description": "Change to force the script to re-run on a redeploy (defaults to current time)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "configure-databricks-ncc",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "AzureCLI",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', parameters('identityResourceId'))]": {}
+                }
+              },
+              "properties": {
+                "azCliVersion": "2.63.0",
+                "forceUpdateTag": "[parameters('forceUpdateTag')]",
+                "timeout": "PT30M",
+                "retentionInterval": "P1D",
+                "cleanupPreference": "OnSuccess",
+                "environmentVariables": [
+                  {
+                    "name": "ACCOUNT_HOST",
+                    "value": "[parameters('accountConsoleUrl')]"
+                  },
+                  {
+                    "name": "ACCOUNT_ID",
+                    "value": "[parameters('databricksAccountId')]"
+                  },
+                  {
+                    "name": "WORKSPACE_ID",
+                    "value": "[parameters('databricksWorkspaceId')]"
+                  },
+                  {
+                    "name": "REGION",
+                    "value": "[parameters('region')]"
+                  },
+                  {
+                    "name": "NCC_NAME",
+                    "value": "[parameters('nccName')]"
+                  },
+                  {
+                    "name": "PLS_RESOURCE_ID",
+                    "value": "[parameters('privateLinkServiceResourceId')]"
+                  },
+                  {
+                    "name": "DOMAIN_NAMES_JSON",
+                    "value": "[string(parameters('privateLinkServiceDomainNames'))]"
+                  }
+                ],
+                "scriptContent": "      set -euo pipefail\r\n\r\n      TOKEN=$(az account get-access-token --resource 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d --query accessToken -o tsv)\r\n      BASE=\"$ACCOUNT_HOST/api/2.0/accounts/$ACCOUNT_ID\"\r\n      AUTH_HEADER=\"Authorization: Bearer $TOKEN\"\r\n\r\n      echo \"Creating network connectivity configuration '$NCC_NAME' in $REGION...\"\r\n      NCC_BODY=$(python3 -c 'import json,os; print(json.dumps({\"name\": os.environ[\"NCC_NAME\"], \"region\": os.environ[\"REGION\"]}))')\r\n      NCC_JSON=$(curl -sf -X POST \"$BASE/network-connectivity-configs\" -H \"$AUTH_HEADER\" -H \"Content-Type: application/json\" -d \"$NCC_BODY\")\r\n      NCC_ID=$(echo \"$NCC_JSON\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"network_connectivity_config_id\"])')\r\n      export NCC_ID\r\n      echo \"Created NCC $NCC_ID\"\r\n\r\n      echo \"Binding NCC to workspace $WORKSPACE_ID...\"\r\n      BIND_BODY=$(python3 -c 'import json,os; print(json.dumps({\"network_connectivity_config_id\": os.environ[\"NCC_ID\"]}))')\r\n      curl -sf -X PATCH \"$BASE/workspaces/$WORKSPACE_ID\" -H \"$AUTH_HEADER\" -H \"Content-Type: application/json\" -d \"$BIND_BODY\" > /dev/null\r\n\r\n      echo \"Creating private endpoint rule to $PLS_RESOURCE_ID...\"\r\n      RULE_BODY=$(python3 -c 'import json,os; print(json.dumps({\"resource_id\": os.environ[\"PLS_RESOURCE_ID\"], \"domain_names\": json.loads(os.environ[\"DOMAIN_NAMES_JSON\"])}))')\r\n      RULE_JSON=$(curl -sf -X POST \"$BASE/network-connectivity-configs/$NCC_ID/private-endpoint-rules\" -H \"$AUTH_HEADER\" -H \"Content-Type: application/json\" -d \"$RULE_BODY\")\r\n      RULE_ID=$(echo \"$RULE_JSON\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"rule_id\"])')\r\n      CONNECTION_STATE=$(echo \"$RULE_JSON\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"connection_state\"])')\r\n      export RULE_ID CONNECTION_STATE\r\n      echo \"Created private endpoint rule $RULE_ID (connection_state=$CONNECTION_STATE)\"\r\n\r\n      python3 -c 'import json,os; print(json.dumps({\"networkConnectivityConfigId\": os.environ[\"NCC_ID\"], \"privateEndpointRuleId\": os.environ[\"RULE_ID\"], \"connectionState\": os.environ[\"CONNECTION_STATE\"]}))' > \"$AZ_SCRIPTS_OUTPUT_PATH\"\r\n    "
+              }
+            }
+          ],
+          "outputs": {
+            "networkConnectivityConfigId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'configure-databricks-ncc'), '2023-08-01').outputs.networkConnectivityConfigId]"
+            },
+            "privateEndpointRuleId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'configure-databricks-ncc'), '2023-08-01').outputs.privateEndpointRuleId]"
+            },
+            "connectionState": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'configure-databricks-ncc'), '2023-08-01').outputs.connectionState]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'private-link-service')]"
+      ]
     }
   ],
   "outputs": {
@@ -682,6 +916,10 @@
     "frontendPort": {
       "type": "int",
       "value": "[parameters('frontendPort')]"
+    },
+    "networkConnectivityConfigId": {
+      "type": "string",
+      "value": "[coalesce(tryGet(if(parameters('deployDatabricksNcc'), reference(resourceId('Microsoft.Resources/deployments', 'databricks-ncc'), '2025-04-01'), null()), 'outputs', 'networkConnectivityConfigId', 'value'), '')]"
     }
   }
 }

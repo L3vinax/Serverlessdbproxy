@@ -22,6 +22,19 @@ param visibilitySubscriptionIds array = []
 param autoApprovalSubscriptionIds array = []
 param tags object = {}
 
+@description('Set true to also configure a Databricks NCC and private endpoint to the Private Link Service created above.')
+param deployDatabricksNcc bool = false
+param databricksAccountConsoleUrl string = 'https://accounts.azuredatabricks.net'
+param databricksAccountId string = ''
+@description('Numeric Databricks workspace ID (not the ARM resource ID).')
+param databricksWorkspaceId string = ''
+@description('Azure region in Databricks region format (e.g. westus2). Required if deployDatabricksNcc is true.')
+param databricksRegion string = ''
+@description('Domain name(s) clients use to reach the Private Link Service, e.g. the on-prem SQL Server FQDN.')
+param privateLinkServiceDomainNames array = []
+@description('Resource ID of a user-assigned managed identity that is an Account Admin in the Databricks account. Required if deployDatabricksNcc is true.')
+param databricksNccIdentityResourceId string = ''
+
 module nsg './modules/nsg.bicep' = {
   name: 'nsg'
   params: {
@@ -76,7 +89,24 @@ module pls './modules/private-link-service.bicep' = {
   dependsOn: [vm]
 }
 
+module ncc './modules/databricks-ncc.bicep' = if (deployDatabricksNcc) {
+  name: 'databricks-ncc'
+  params: {
+    location: location
+    tags: tags
+    accountConsoleUrl: databricksAccountConsoleUrl
+    databricksAccountId: databricksAccountId
+    databricksWorkspaceId: databricksWorkspaceId
+    region: databricksRegion
+    nccName: '${prefix}-ncc'
+    privateLinkServiceResourceId: pls.outputs.id
+    privateLinkServiceDomainNames: privateLinkServiceDomainNames
+    identityResourceId: databricksNccIdentityResourceId
+  }
+}
+
 output privateLinkServiceId string = pls.outputs.id
 output privateLinkServiceAlias string = pls.outputs.alias
 output haproxyVmName string = vm.outputs.vmName
 output frontendPort int = frontendPort
+output networkConnectivityConfigId string = ncc.?outputs.networkConnectivityConfigId ?? ''

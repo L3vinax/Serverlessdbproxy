@@ -40,4 +40,9 @@ az vm run-command invoke \
 
 This baseline uses one VM. Use two zonal VMs for production availability.
 
+## Next Steps
+
+Configure Serverless Databricks workspace to use NCC
+In NCC, establish private endpoint to the Private Link Service created in this script
+
 This scirpt is provided as-is. Please validate all deployments.
