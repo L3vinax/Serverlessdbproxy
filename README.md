@@ -4,7 +4,7 @@ Deploys an HAProxy Ubuntu VM behind an internal Standard Load Balancer and Azure
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FL3vinax%2FServerlessdbproxy%2Fmain%2Fazuredeploy.json)
 
-## Update HAProxy Backends
+## Update HAProxy Backends - (Preview)
 
 Use this deployment to update the existing load balancer rules, NSG rules, and HAProxy configuration.
 
