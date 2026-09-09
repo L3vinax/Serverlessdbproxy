@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "8223445307057655617"
+      "templateHash": "3867609911338183750"
     },
     "description": "Adds listener rules to an existing HAProxy load balancer and updates the HAProxy configuration on its VM."
   },
@@ -231,7 +231,7 @@
       "location": "[parameters('location')]",
       "properties": {
         "source": {
-          "script": "[format('set -euo pipefail\r\n\r\nnew_config=$(mktemp)\r\nbackup_config=$(mktemp)\r\ntrap ''rm -f \"$new_config\" \"$backup_config\"'' EXIT\r\n\r\nprintf ''%s'' ''{0}'' | base64 --decode > \"$new_config\"\r\nhaproxy -c -f \"$new_config\"\r\n\r\ncp /etc/haproxy/haproxy.cfg \"$backup_config\"\r\ninstall -o root -g root -m 0644 \"$new_config\" /etc/haproxy/haproxy.cfg\r\n\r\nif ! systemctl reload haproxy; then\r\n    install -o root -g root -m 0644 \"$backup_config\" /etc/haproxy/haproxy.cfg\r\n    systemctl restart haproxy\r\n    exit 1\r\nfi\r\n  ', variables('encodedHaproxyConfig'))]"
+          "script": "[format('set -euo pipefail\n\nnew_config=$(mktemp)\nbackup_config=$(mktemp)\ntrap ''rm -f \"$new_config\" \"$backup_config\"'' EXIT\n\nprintf ''%s'' ''{0}'' | base64 --decode > \"$new_config\"\nhaproxy -c -f \"$new_config\"\n\ncp /etc/haproxy/haproxy.cfg \"$backup_config\"\ninstall -o root -g root -m 0644 \"$new_config\" /etc/haproxy/haproxy.cfg\n\nif ! systemctl reload haproxy; then\n    install -o root -g root -m 0644 \"$backup_config\" /etc/haproxy/haproxy.cfg\n    systemctl restart haproxy\n    exit 1\nfi\n  ', variables('encodedHaproxyConfig'))]"
         },
         "timeoutInSeconds": 300,
         "asyncExecution": false,

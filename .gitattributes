@@ -1,0 +1,6 @@
+# Force LF line endings for template files whose content is embedded verbatim into scripts
+# that execute on Linux VMs/containers (bash chokes on CRLF: "invalid option name").
+*.bicep text eol=lf
+*.bicepparam text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
