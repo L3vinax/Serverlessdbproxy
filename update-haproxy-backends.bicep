@@ -36,7 +36,19 @@ param tags object = {}
 param maxConnections int = 10000
 @minLength(1)
 @maxLength(145)
-@description('Complete desired backend list. Each backend gets its own frontend listener port.')
+@description('''Complete desired backend list. Each backend gets its own frontend listener port. This list is authoritative: include every existing listener/backend that should remain after the update, or it will be removed. Each backend's servers array supports multiple entries only for redundant copies of the same SQL Server behind one port; distinct SQL Servers each need their own backend entry with a unique name and frontendPort. This must be valid JSON, for example:
+[
+  {
+    "name": "sql-prod",
+    "frontendPort": 1433,
+    "servers": [ { "name": "sql01", "address": "10.100.20.25", "port": 1433 } ]
+  },
+  {
+    "name": "sql-reporting",
+    "frontendPort": 1434,
+    "servers": [ { "name": "sql02", "address": "10.100.20.40", "port": 1433 } ]
+  }
+]''')
 param backends haproxyBackend[]
 
 var frontendName = 'sql-frontend'

@@ -12,6 +12,32 @@ Use this deployment to update the existing load balancer rules, NSG rules, and H
 
 The backend list is authoritative. Include every existing listener and backend that should remain after the update.
 
+`backends` is an array of objects, not a flat list of addresses. A `servers` array with multiple entries is only for redundant copies of the *same* SQL Server behind one port; distinct SQL Servers each need their own backend entry with a unique `name` and `frontendPort`:
+
+```json
+[
+  {
+    "name": "sql-prod",
+    "frontendPort": 1433,
+    "servers": [ { "name": "sql01", "address": "10.100.20.25", "port": 1433 } ]
+  },
+  {
+    "name": "sql-reporting",
+    "frontendPort": 1434,
+    "servers": [ { "name": "sql02", "address": "10.100.20.40", "port": 1433 } ]
+  }
+]
+```
+
+Pasting this directly into the Deploy to Azure portal box works, but it's easy to mistype. Prefer deploying with [examples/update-haproxy-backends.bicepparam](examples/update-haproxy-backends.bicepparam):
+
+```bash
+az deployment group create \
+  --resource-group <deployment-rg> \
+  --template-file update-haproxy-backends.bicep \
+  --parameters examples/update-haproxy-backends.bicepparam
+```
+
 ## Prerequisites
 
 - Existing subnet with routing to on-premises through vWAN/ExpressRoute.

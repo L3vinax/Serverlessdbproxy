@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "7667096917683529126"
+      "templateHash": "8223445307057655617"
     },
     "description": "Adds listener rules to an existing HAProxy load balancer and updates the HAProxy configuration on its VM."
   },
@@ -103,7 +103,7 @@
       "minLength": 1,
       "maxLength": 145,
       "metadata": {
-        "description": "Complete desired backend list. Each backend gets its own frontend listener port."
+        "description": "Complete desired backend list. Each backend gets its own frontend listener port. This list is authoritative: include every existing listener/backend that should remain after the update, or it will be removed. Each backend's servers array supports multiple entries only for redundant copies of the same SQL Server behind one port; distinct SQL Servers each need their own backend entry with a unique name and frontendPort. This must be valid JSON, for example:\n[\n  {\n    \"name\": \"sql-prod\",\n    \"frontendPort\": 1433,\n    \"servers\": [ { \"name\": \"sql01\", \"address\": \"10.100.20.25\", \"port\": 1433 } ]\n  },\n  {\n    \"name\": \"sql-reporting\",\n    \"frontendPort\": 1434,\n    \"servers\": [ { \"name\": \"sql02\", \"address\": \"10.100.20.40\", \"port\": 1433 } ]\n  }\n]"
       }
     }
   },
