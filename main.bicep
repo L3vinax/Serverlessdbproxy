@@ -7,6 +7,7 @@ param prefix string = 'dbx-sqlproxy'
 @description('Existing subnet resource ID. Private Link service network policies must be disabled.')
 param subnetResourceId string
 param adminUsername string = 'azureadmin'
+@description('OpenSSH public key text in ssh-rsa or ssh-ed25519 format. Supply the contents of the .pub file, not its path or a private key.')
 @secure()
 param sshPublicKey string
 param vmSize string = 'Standard_D2s_v5'

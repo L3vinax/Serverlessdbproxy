@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "17185413892809554995"
+      "templateHash": "10458740063253941237"
     },
     "description": "Deploys HAProxy behind an internal Standard Load Balancer and Private Link Service for Databricks Serverless access to on-premises SQL Server."
   },
@@ -29,7 +29,10 @@
       "defaultValue": "azureadmin"
     },
     "sshPublicKey": {
-      "type": "securestring"
+      "type": "securestring",
+      "metadata": {
+        "description": "OpenSSH public key text in ssh-rsa or ssh-ed25519 format. Supply the contents of the .pub file, not its path or a private key."
+      }
     },
     "vmSize": {
       "type": "string",
@@ -421,7 +424,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "13056572419402411998"
+              "templateHash": "17031564103925604931"
             }
           },
           "parameters": {
@@ -448,7 +451,10 @@
               "type": "string"
             },
             "sshPublicKey": {
-              "type": "securestring"
+              "type": "securestring",
+              "metadata": {
+                "description": "OpenSSH public key text in ssh-rsa or ssh-ed25519 format. Supply the contents of the .pub file, not its path or a private key."
+              }
             },
             "vmSize": {
               "type": "string"
@@ -494,9 +500,9 @@
             },
             "packages": "[if(equals(parameters('osType'), 'RHEL'), createArray('haproxy', 'policycoreutils-python-utils'), createArray('haproxy'))]",
             "packagesYaml": "[join(map(variables('packages'), lambda('p', format('  - {0}', lambdaVariables('p')))), '\n')]",
-            "rhelPortSetupRuncmd": "[if(equals(parameters('osType'), 'RHEL'), format('  - firewall-cmd --permanent --add-port={0}/tcp\n  - firewall-cmd --permanent --add-port=8404/tcp\n  - firewall-cmd --reload\n  - semanage port -a -t http_port_t -p tcp {0} 2>/dev/null || semanage port -m -t http_port_t -p tcp {0}', parameters('frontendPort')), '')]",
+            "rhelPortSetupRuncmd": "[if(equals(parameters('osType'), 'RHEL'), format('  - firewall-cmd --permanent --add-port={0}/tcp\n  - firewall-cmd --permanent --add-port=8404/tcp\n  - firewall-cmd --reload\n  - semanage port -a -t http_port_t -p tcp {0} 2>/dev/null || semanage port -m -t http_port_t -p tcp {0}\n  - semanage port -a -t http_port_t -p tcp 8404 2>/dev/null || semanage port -m -t http_port_t -p tcp 8404', parameters('frontendPort')), '')]",
             "nicName": "[format('{0}-nic', parameters('name'))]",
-            "cloudInit": "[format('#cloud-config\npackage_update: true\npackages:\n{0}\n\nwrite_files:\n  - path: /etc/haproxy/haproxy.cfg\n    owner: root:root\n    permissions: ''0644''\n    content: |\n      global\n          log /dev/log local0\n          log /dev/log local1 notice\n          user haproxy\n          group haproxy\n          daemon\n          maxconn {1}\n\n      defaults\n          log global\n          mode tcp\n          option tcplog\n          option dontlognull\n          timeout connect 10s\n          timeout client 1h\n          timeout server 1h\n\n      frontend sql_frontend\n          bind 0.0.0.0:{2}\n          default_backend sql_backend\n\n      backend sql_backend\n          option tcp-check\n          server sql01 {3}:{4} check inter 5s fall 3 rise 2\n\n      listen health\n          bind 0.0.0.0:8404\n          mode http\n          monitor-uri /health\n\nruncmd:\n  - haproxy -c -f /etc/haproxy/haproxy.cfg{5}\n  - systemctl enable haproxy\n  - systemctl restart haproxy\n', variables('packagesYaml'), parameters('maxConnections'), parameters('frontendPort'), parameters('sqlServerAddress'), parameters('sqlServerPort'), variables('rhelPortSetupRuncmd'))]"
+            "cloudInit": "[format('#cloud-config\npackage_update: true\npackages:\n{0}\n\nwrite_files:\n  - path: /etc/haproxy/haproxy.cfg\n    owner: root:root\n    permissions: ''0644''\n    content: |\n      global\n          log /dev/log local0\n          log /dev/log local1 notice\n          user haproxy\n          group haproxy\n          daemon\n          maxconn {1}\n\n      defaults\n          log global\n          mode tcp\n          option tcplog\n          option dontlognull\n          timeout connect 10s\n          timeout client 1h\n          timeout server 1h\n\n      frontend sql_frontend\n          bind 0.0.0.0:{2}\n          default_backend sql_backend\n\n      backend sql_backend\n          option tcp-check\n          server sql01 {3}:{4} check inter 5s fall 3 rise 2\n\n      listen health\n          bind 0.0.0.0:8404\n          mode http\n          monitor-uri /health\n\nruncmd:\n  - haproxy -c -f /etc/haproxy/haproxy.cfg\n{5}\n  - systemctl enable haproxy\n  - systemctl restart haproxy\n', variables('packagesYaml'), parameters('maxConnections'), parameters('frontendPort'), parameters('sqlServerAddress'), parameters('sqlServerPort'), variables('rhelPortSetupRuncmd'))]"
           },
           "resources": [
             {
@@ -564,7 +570,7 @@
                       "publicKeys": [
                         {
                           "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
-                          "keyData": "[parameters('sshPublicKey')]"
+                          "keyData": "[trim(parameters('sshPublicKey'))]"
                         }
                       ]
                     }

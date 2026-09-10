@@ -5,6 +5,7 @@ param subnetResourceId string
 param nsgResourceId string
 param backendPoolId string
 param adminUsername string
+@description('OpenSSH public key text in ssh-rsa or ssh-ed25519 format. Supply the contents of the .pub file, not its path or a private key.')
 @secure()
 param sshPublicKey string
 param vmSize string
@@ -44,7 +45,8 @@ var rhelPortSetupRuncmd = osType == 'RHEL' ? format('''
   - firewall-cmd --permanent --add-port={0}/tcp
   - firewall-cmd --permanent --add-port=8404/tcp
   - firewall-cmd --reload
-  - semanage port -a -t http_port_t -p tcp {0} 2>/dev/null || semanage port -m -t http_port_t -p tcp {0}''', frontendPort) : ''
+  - semanage port -a -t http_port_t -p tcp {0} 2>/dev/null || semanage port -m -t http_port_t -p tcp {0}
+  - semanage port -a -t http_port_t -p tcp 8404 2>/dev/null || semanage port -m -t http_port_t -p tcp 8404''', frontendPort) : ''
 
 var nicName = '${name}-nic'
 var cloudInit = format('''#cloud-config
@@ -88,7 +90,8 @@ write_files:
           monitor-uri /health
 
 runcmd:
-  - haproxy -c -f /etc/haproxy/haproxy.cfg{5}
+  - haproxy -c -f /etc/haproxy/haproxy.cfg
+{5}
   - systemctl enable haproxy
   - systemctl restart haproxy
 ''', packagesYaml, maxConnections, frontendPort, sqlServerAddress, sqlServerPort, rhelPortSetupRuncmd)
@@ -145,7 +148,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
           publicKeys: [
             {
               path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: sshPublicKey
+              keyData: trim(sshPublicKey)
             }
           ]
         }
