@@ -1,6 +1,6 @@
 # Databricks Serverless SQL Proxy
 
-Deploys an HAProxy Ubuntu VM behind an internal Standard Load Balancer and Azure Private Link Service.
+Deploys an HAProxy Linux VM (Ubuntu or RHEL) behind an internal Standard Load Balancer and Azure Private Link Service.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FL3vinax%2FServerlessdbproxy%2Fmain%2Fazuredeploy.json)
 
