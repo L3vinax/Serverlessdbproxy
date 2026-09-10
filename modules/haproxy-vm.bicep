@@ -13,11 +13,44 @@ param sqlServerAddress string
 param sqlServerPort int
 param maxConnections int
 
+@description('Linux distribution for the HAProxy VM.')
+@allowed([
+  'Ubuntu'
+  'RHEL'
+])
+param osType string = 'Ubuntu'
+
+var osImages = {
+  Ubuntu: {
+    publisher: 'Canonical'
+    offer: 'ubuntu-24_04-lts'
+    sku: 'server'
+    version: 'latest'
+  }
+  // RHEL PAYG image; if deployment fails with a marketplace terms error, run:
+  // az vm image terms accept --urn RedHat:RHEL:9-lvm-gen2:latest
+  RHEL: {
+    publisher: 'RedHat'
+    offer: 'RHEL'
+    sku: '9-lvm-gen2'
+    version: 'latest'
+  }
+}
+
+// RHEL ships firewalld enabled and SELinux enforcing, both of which block HAProxy's non-standard listener ports by default.
+var packages = osType == 'RHEL' ? ['haproxy', 'policycoreutils-python-utils'] : ['haproxy']
+var packagesYaml = join(map(packages, p => '  - ${p}'), '\n')
+var rhelPortSetupRuncmd = osType == 'RHEL' ? format('''
+  - firewall-cmd --permanent --add-port={0}/tcp
+  - firewall-cmd --permanent --add-port=8404/tcp
+  - firewall-cmd --reload
+  - semanage port -a -t http_port_t -p tcp {0} 2>/dev/null || semanage port -m -t http_port_t -p tcp {0}''', frontendPort) : ''
+
 var nicName = '${name}-nic'
 var cloudInit = format('''#cloud-config
 package_update: true
 packages:
-  - haproxy
+{0}
 
 write_files:
   - path: /etc/haproxy/haproxy.cfg
@@ -30,7 +63,7 @@ write_files:
           user haproxy
           group haproxy
           daemon
-          maxconn {0}
+          maxconn {1}
 
       defaults
           log global
@@ -42,12 +75,12 @@ write_files:
           timeout server 1h
 
       frontend sql_frontend
-          bind 0.0.0.0:{1}
+          bind 0.0.0.0:{2}
           default_backend sql_backend
 
       backend sql_backend
           option tcp-check
-          server sql01 {2}:{3} check inter 5s fall 3 rise 2
+          server sql01 {3}:{4} check inter 5s fall 3 rise 2
 
       listen health
           bind 0.0.0.0:8404
@@ -55,10 +88,10 @@ write_files:
           monitor-uri /health
 
 runcmd:
-  - haproxy -c -f /etc/haproxy/haproxy.cfg
+  - haproxy -c -f /etc/haproxy/haproxy.cfg{5}
   - systemctl enable haproxy
   - systemctl restart haproxy
-''', maxConnections, frontendPort, sqlServerAddress, sqlServerPort)
+''', packagesYaml, maxConnections, frontendPort, sqlServerAddress, sqlServerPort, rhelPortSetupRuncmd)
 
 resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   name: nicName
@@ -119,12 +152,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
       }
     }
     storageProfile: {
-      imageReference: {
-        publisher: 'Canonical'
-        offer: 'ubuntu-24_04-lts'
-        sku: 'server'
-        version: 'latest'
-      }
+      imageReference: osImages[osType]
       osDisk: {
         createOption: 'FromImage'
         caching: 'ReadWrite'

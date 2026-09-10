@@ -18,6 +18,12 @@ param sqlServerAddress string
 @maxValue(65535)
 param sqlServerPort int = 1433
 param maxConnections int = 10000
+@description('Linux distribution for the HAProxy VM.')
+@allowed([
+  'Ubuntu'
+  'RHEL'
+])
+param osType string = 'Ubuntu'
 param visibilitySubscriptionIds array = []
 param autoApprovalSubscriptionIds array = []
 param tags object = {}
@@ -72,6 +78,7 @@ module vm './modules/haproxy-vm.bicep' = {
     sqlServerAddress: sqlServerAddress
     sqlServerPort: sqlServerPort
     maxConnections: maxConnections
+    osType: osType
   }
 }
 
